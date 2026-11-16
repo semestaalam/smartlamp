@@ -1,0 +1,1 @@
+const ALAM_AI_URL = "https://script.google.com/macros/s/PASTE_URL_WEB_APP_LO_DISINI/exec";
