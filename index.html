@@ -147,102 +147,112 @@ function alamAddMessage(role,text){
   host.scrollTop=host.scrollHeight;
   return item;
 }
-async function askAI(){
+async function askAI() {
   const field = document.getElementById('question');
-  const button = document.querySelector('#assistant button[onclick="askAI()"]');
+  const button = document.querySelector(
+    '#assistant button[onclick="askAI()"]'
+  );
+
   const question = field.value.trim();
 
-  if(!question || ALAM_TECH_BUSY) return;
+  if (!question || ALAM_TECH_BUSY) return;
 
-  if(typeof ALAM_AI_URL === 'undefined' || !ALAM_AI_URL){
+  if (typeof ALAM_AI_URL === 'undefined' || !ALAM_AI_URL) {
     toast('Alamat layanan ALAM belum tersedia.');
     return;
   }
 
-  // Membaca perangkat yang sedang dipilih pengguna
+  // 1. BACA PERANGKAT YANG DIPILIH
   const brandSelect = document.getElementById('brand');
   const modelSelect = document.getElementById('model');
 
-  const brand = brandSelect
-    ? (brandSelect.options[brandSelect.selectedIndex]?.text || '').trim()
-    : '';
+  let deviceContext = null;
 
-  const model = modelSelect
-    ? (modelSelect.options[modelSelect.selectedIndex]?.text || '').trim()
-    : '';
+  if (brandSelect && modelSelect) {
+    const brandOption =
+      brandSelect.options[brandSelect.selectedIndex];
 
-  const brandValue = brandSelect ? brandSelect.value : '';
-  const modelValue = modelSelect ? modelSelect.value : '';
+    const modelOption =
+      modelSelect.options[modelSelect.selectedIndex];
 
-  const deviceSelected =
-    brandValue &&
-    modelValue &&
-    !/pilih|select/i.test(brand + ' ' + model);
+    const brand = brandSelect.value;
+    const model = modelSelect.value;
 
-  // Identitas dan pedoman teknisi ALAM
-  const technicianContext = `
-IDENTITAS ASISTEN:
-Nama Anda ALAM -AI lampu cerdas.
-Anda adalah teknisi dan pendamping pengguna SMARTLAMP.
+    if (brand && model) {
+      deviceContext = {
+        merk: brand,
+        namaMerek: brandOption ? brandOption.text : brand,
+        model: model,
+        namaModel: modelOption ? modelOption.text : model
+      };
 
-PERAN UTAMA:
-- Membantu pengguna memahami dan mengoperasikan SMARTLAMP.
-- Membimbing pemasangan dan konfigurasi lampu pintar.
-- Membantu proses pairing dan koneksi WiFi.
-- Menjelaskan penggunaan aplikasi pengendali lampu.
-- Membantu menganalisis gangguan dan mencari solusi.
-- Menjelaskan kompatibilitas perangkat dan merek lampu.
+      // Ambil spesifikasi dari katalog HTML jika tersedia
+      try {
+        if (typeof LAMP_CATALOG !== 'undefined') {
+          const brandKey = Object.keys(LAMP_CATALOG).find(key =>
+            key === brand ||
+            LAMP_CATALOG[key].name === brand ||
+            LAMP_CATALOG[key].brand === brand
+          );
 
-CARA BERKOMUNIKASI:
-- Gunakan bahasa Indonesia yang ramah, alami, dan mudah dipahami.
-- Bertindak seperti teknisi yang sedang mendampingi pengguna.
-- Utamakan solusi praktis daripada teori panjang.
-- Berikan instruksi secara bertahap dan berurutan.
-- Jangan memberikan terlalu banyak langkah sekaligus jika pengguna masih dalam proses.
-- Jangan mengulang penjelasan yang sudah dipahami pengguna.
-- Jika informasi belum cukup, tanyakan satu pertanyaan yang paling penting.
-- Jangan mengarang spesifikasi, fitur, harga, atau kompatibilitas produk.
-- Jika tidak yakin, sampaikan dengan jujur.
+          if (brandKey) {
+            const group = LAMP_CATALOG[brandKey];
+            const models = group.models || group.model || [];
 
-PANDUAN KESELAMATAN:
-- Ingatkan pengguna mematikan aliran listrik sebelum memasang atau melepas perangkat.
-- Jangan meminta pengguna menyentuh kabel terbuka atau bagian bertegangan.
-- Untuk pekerjaan instalasi listrik berisiko, sarankan bantuan teknisi listrik.
+            const selectedModel = models.find(item =>
+              item.name === model ||
+              item.code === model ||
+              item.name === (modelOption && modelOption.text)
+            );
 
-POLA JAWABAN:
-1. Pahami masalah atau tujuan pengguna.
-2. Berikan solusi yang sesuai dengan perangkatnya.
-3. Jelaskan langkah praktis satu per satu.
-4. Beritahu hasil yang seharusnya terlihat.
-5. Jika belum berhasil, lanjutkan diagnosis berdasarkan hasil pengguna.
+            if (selectedModel) {
+              deviceContext = {
+                merk: brandKey,
+                aplikasi: group.app || group.application || '',
+                model: selectedModel.name || selectedModel.nama || model,
+                kode: selectedModel.code || selectedModel.kode || '',
+                fitting: selectedModel.fitting || '',
+                daya: selectedModel.watt || selectedModel.daya || '',
+                warna: selectedModel.color || selectedModel.warna || '',
+                lumen: selectedModel.lumen || '',
+                catatan: selectedModel.note || selectedModel.catatan || ''
+              };
+            }
+          }
+        }
+      } catch (catalogError) {
+        console.warn('Katalog perangkat:', catalogError);
+      }
+    }
+  }
 
-Jangan mengaku telah melakukan tindakan pada perangkat pengguna.
-Anda hanya memberikan panduan dan bantuan teknis.
-`;
+  // 2. UBAH FORMAT RIWAYAT AGAR SESUAI GEMINI
+  const history = ALAM_TECH_HISTORY
+    .slice(-12)
+    .map(item => {
+      if (!item || !item.text) return null;
 
-  const deviceContext = deviceSelected
-    ? `
-PERANGKAT YANG SEDANG DIPILIH PENGGUNA:
-Merek: ${brand}
-Model: ${model}
+      return {
+        role: item.role === 'assistant' || item.role === 'model'
+          ? 'model'
+          : 'user',
+        text: String(item.text)
+      };
+    })
+    .filter(Boolean);
 
-Gunakan informasi perangkat tersebut sebagai konteks utama jawaban.
-Sesuaikan panduan dengan perangkat yang dipilih.
-Jangan mengganti model dengan produk lain.
-Jika pertanyaan tidak berkaitan dengan perangkat tersebut, jawab sesuai pertanyaan pengguna.
-`
-    : `
-PERANGKAT:
-Pengguna belum memilih merek dan model lampu.
-Jangan menebak perangkat yang digunakan.
-Jika diperlukan, tanyakan merek atau model lampunya.
-`;
+  // 3. SIAPKAN PERMINTAAN SESUAI FORMAT GS
+  const payload = {
+    msg: question,
+    history: history,
+    deviceContext: deviceContext
+  };
 
   ALAM_TECH_BUSY = true;
   field.value = '';
   field.disabled = true;
 
-  if(button){
+  if (button) {
     button.disabled = true;
     button.textContent = 'ALAM SEDANG MENJAWAB...';
   }
@@ -251,24 +261,11 @@ Jika diperlukan, tanyakan merek atau model lampunya.
 
   const loading = alamAddMessage(
     'assistant',
-    'Sebentar, saya sedang memeriksa masalah Anda...'
+    'Sebentar, saya sedang memeriksa pertanyaan Anda...'
   );
 
-  try{
-    const enrichedQuestion =
-      technicianContext +
-      '\n' +
-      deviceContext +
-      '\nPERTANYAAN PENGGUNA:\n' +
-      question;
-
-    const payload = {
-      action: 'chat',
-      pertanyaan: enrichedQuestion,
-      riwayat: ALAM_TECH_HISTORY.slice(-12)
-    };
-
-    const response = await fetch(ALAM_AI_URL,{
+  try {
+    const response = await fetch(ALAM_AI_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'text/plain;charset=utf-8'
@@ -276,76 +273,75 @@ Jika diperlukan, tanyakan merek atau model lampunya.
       body: JSON.stringify(payload)
     });
 
-    if(!response.ok){
+    if (!response.ok) {
       throw new Error(
-        'Layanan teknisi memberi respons HTTP ' +
-        response.status + '.'
+        'Layanan teknisi memberikan HTTP ' + response.status
       );
     }
 
     const result = await response.json();
 
-    if(result.success === false){
+    if (result.success === false) {
       throw new Error(
-        result.error ||
-        'Layanan ALAM belum dapat memproses pertanyaan.'
+        result.error || 'Layanan teknisi belum dapat memproses pertanyaan.'
       );
     }
 
+    // GS resmi menggunakan properti "jawab"
     const answer = String(
-  result.jawab ??
-  result.jawaban ??
-  result.answer ??
-  result.response ??
-  result.message ??
-  ''
-).trim();
+      result.jawab ||
+      result.jawaban ||
+      result.answer ||
+      ''
+    ).trim();
 
-if(!answer){
-  console.error('Respons kosong dari GS:', result);
-  throw new Error(
-    'Respons layanan teknisi tidak berisi jawaban. Periksa format respons GS.'
-  );
-}
+    if (!answer) {
+      console.error('Respons GS:', result);
+      throw new Error('Jawaban dari layanan teknisi kosong.');
+    }
+
     loading.remove();
+
     alamAddMessage('assistant', answer);
 
-    // Simpan percakapan menggunakan pertanyaan asli
+    // 4. SIMPAN RIWAYAT ASLI UNTUK PERCAKAPAN SELANJUTNYA
     ALAM_TECH_HISTORY.push(
-      {role:'user', text:question},
-      {role:'assistant', text:answer}
+      { role: 'user', text: question },
+      { role: 'assistant', text: answer }
     );
 
-    if(ALAM_TECH_HISTORY.length > 12){
+    if (ALAM_TECH_HISTORY.length > 12) {
       ALAM_TECH_HISTORY.splice(
         0,
         ALAM_TECH_HISTORY.length - 12
       );
     }
 
-  }catch(error){
+  } catch (error) {
     loading.remove();
+
+    console.error('ALAM TECH ERROR:', error);
 
     alamAddMessage(
       'assistant',
-      'Maaf, koneksi ke layanan teknisi belum berhasil. ' +
+      'Maaf, Kak. Koneksi layanan teknisi belum berhasil. ' +
       (error && error.message
         ? error.message
         : 'Silakan coba kembali.')
     );
 
-  }finally{
+  } finally {
     ALAM_TECH_BUSY = false;
     field.disabled = false;
 
-    if(button){
+    if (button) {
       button.disabled = false;
       button.textContent = 'KIRIM PERTANYAAN';
     }
 
     field.focus();
   }
-}
+} 
 function selectPlan(button){document.querySelectorAll('.plan-option').forEach(item=>item.classList.remove('selected'));button.classList.add('selected');selectedPlan=button.dataset.plan;selectedPrice=button.dataset.price;document.getElementById('selectedPlan').textContent=selectedPlan;document.getElementById('selectedPrice').textContent=selectedPrice}
 function choosePayment(method,button){selectedPayment=method;document.querySelectorAll('.payment-choice button').forEach(item=>item.classList.remove('selected'));button.classList.add('selected');const detail=document.getElementById('paymentDetail');if(method==='DANA')detail.innerHTML='<h3>Pembayaran DANA</h3><p class="muted">Transfer ke nomor DANA berikut:</p><strong>081907196212</strong><p>Nama penerima: Daus Azza</p>';if(method==='BNI')detail.innerHTML='<h3>Transfer Bank BNI</h3><p class="muted">Transfer ke rekening berikut:</p><strong>1764304571</strong><p>Nama penerima: Firdaus Saiful Alam</p>';if(method==='QRIS')detail.innerHTML=`<h3>Pembayaran QRIS</h3><div class="qris-area" id="publicQris">${uploadedQris?`<img src="${uploadedQris}" alt="QRIS SMARTLAMP">`:'<span class="muted">QRIS belum tersedia.</span>'}</div>`}
 function confirmPayment(){if(!selectedPlan){toast('Pilih paket layanan terlebih dahulu.');return}if(!selectedPayment){toast('Pilih metode pembayaran terlebih dahulu.');return}if(selectedPlan==='Free Trial 14 Hari'){toast('Pilihan Free Trial dicatat.');return}toast('Pilihan pembayaran dicatat. Silakan lakukan pembayaran sesuai metode yang dipilih.')}
