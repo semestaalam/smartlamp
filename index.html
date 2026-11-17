@@ -293,13 +293,20 @@ Jika diperlukan, tanyakan merek atau model lampunya.
     }
 
     const answer = String(
-      result.jawaban ||
-      result.answer ||
-      result.response ||
-      result.message ||
-      'Maaf, saya belum menerima jawaban dari layanan teknisi.'
-    ).trim();
+  result.jawab ??
+  result.jawaban ??
+  result.answer ??
+  result.response ??
+  result.message ??
+  ''
+).trim();
 
+if(!answer){
+  console.error('Respons kosong dari GS:', result);
+  throw new Error(
+    'Respons layanan teknisi tidak berisi jawaban. Periksa format respons GS.'
+  );
+}
     loading.remove();
     alamAddMessage('assistant', answer);
 
